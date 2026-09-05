@@ -1,12 +1,499 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>ignition</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ignition, a boot sequence you can step through</title>
+<style>
+  :root {
+    --bg: #f5f5f7;
+    --panel: #ffffff;
+    --panel-2: #fbfbfd;
+    --ink: #1d1d1f;
+    --ink-soft: #6e6e73;
+    --line: #d2d2d7;
+    --accent: #0071e3;
+    --accent-soft: #e8f1fe;
+    --ok: #1a7f37;
+    --ok-soft: #e6f4ea;
+    --bad: #c0362c;
+    --bad-soft: #fdecea;
+    --reserved: #8e8e93;
+    --loader: #5856d6;
+    --memmap: #ff9500;
+    --kernel: #0071e3;
+    --free: #34c759;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --radius: 14px;
+    --shadow: 0 1px 3px rgba(0,0,0,.06), 0 8px 30px rgba(0,0,0,.05);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Dark theme. This block MUST stay after the base body rule and must
+     re-declare both the variables and the body background, otherwise a dark
+     Chrome renders dark text on a white page. */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000;
+      --panel: #1c1c1e;
+      --panel-2: #161618;
+      --ink: #f5f5f7;
+      --ink-soft: #98989d;
+      --line: #38383a;
+      --accent: #2997ff;
+      --accent-soft: #10233b;
+      --ok: #30d158;
+      --ok-soft: #12301b;
+      --bad: #ff453a;
+      --bad-soft: #3a1512;
+      --reserved: #8e8e93;
+      --loader: #7d7aff;
+      --memmap: #ff9f0a;
+      --kernel: #2997ff;
+      --free: #30d158;
+      --shadow: 0 1px 3px rgba(0,0,0,.5), 0 8px 30px rgba(0,0,0,.5);
+    }
+    body { background: var(--bg); color: var(--ink); }
+  }
+
+  header {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 56px 24px 12px;
+  }
+  header h1 { font-size: 40px; margin: 0 0 6px; letter-spacing: -.02em; }
+  header p.tag { font-size: 19px; color: var(--ink-soft); margin: 0 0 6px; max-width: 720px; }
+  header .honest {
+    font-size: 14px; color: var(--ink-soft);
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 10px 14px; margin-top: 14px; max-width: 720px;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 12px 24px 80px; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 20px;
+    margin: 18px 0;
+  }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-soft); margin: 0 0 14px; }
+
+  .how ol { margin: 0; padding-left: 20px; }
+  .how li { margin: 6px 0; }
+  .how .tour { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 15px; }
+  .kbd { font-family: var(--mono); font-size: 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button {
+    font-family: var(--sans); font-size: 15px; font-weight: 500;
+    color: #fff; background: var(--accent);
+    border: none; border-radius: 980px; padding: 9px 18px; cursor: pointer;
+    transition: transform .04s ease, opacity .2s ease;
+  }
+  button:hover { opacity: .9; }
+  button:active { transform: scale(.97); }
+  button.secondary { background: var(--panel-2); color: var(--ink); border: 1px solid var(--line); }
+  button:disabled { opacity: .4; cursor: default; }
+  label.sel { font-size: 14px; color: var(--ink-soft); display: inline-flex; gap: 8px; align-items: center; margin-left: auto; }
+  select {
+    font-family: var(--sans); font-size: 14px; color: var(--ink);
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px;
+  }
+
+  .stage-row { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); margin-top: 12px; }
+  .stage-row .pill {
+    display: inline-block; padding: 2px 8px; margin: 3px 4px 3px 0; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--panel-2);
+  }
+  .stage-row .pill.done { color: var(--ok); border-color: var(--ok); background: var(--ok-soft); }
+  .stage-row .pill.active { color: #fff; background: var(--accent); border-color: var(--accent); }
+  .stage-row .pill.failed { color: #fff; background: var(--bad); border-color: var(--bad); }
+
+  .grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: 18px; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+
+  .console {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.7;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px; min-height: 260px; max-height: 340px; overflow: auto; white-space: pre-wrap;
+  }
+  .console .tag { color: var(--accent); }
+  .console .err { color: var(--bad); font-weight: 600; }
+
+  .cpu { display: flex; gap: 10px; align-items: center; font-size: 14px; margin-bottom: 12px; }
+  .chip { font-family: var(--mono); font-size: 12px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); }
+  .chip.real { color: var(--memmap); border-color: var(--memmap); }
+  .chip.prot { color: var(--free); border-color: var(--free); }
+  .arrow { color: var(--ink-soft); }
+
+  table.hdr { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
+  table.hdr td { padding: 3px 6px; border-bottom: 1px solid var(--line); }
+  table.hdr td.k { color: var(--ink-soft); width: 40%; }
+
+  .mm { display: flex; flex-direction: column; gap: 4px; }
+  .mm .region {
+    display: flex; align-items: center; gap: 10px;
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px;
+    font-family: var(--mono); font-size: 11.5px;
+    opacity: 0; transform: translateY(4px); transition: opacity .35s ease, transform .35s ease;
+  }
+  .mm .region.show { opacity: 1; transform: none; }
+  .mm .swatch { width: 12px; height: 12px; border-radius: 3px; flex: 0 0 auto; }
+  .mm .region .lbl { width: 74px; color: var(--ink-soft); }
+  .mm .region .rng { flex: 1; }
+  .mm .region .bss { color: var(--memmap); }
+  .sw-reserved { background: var(--reserved); }
+  .sw-loader { background: var(--loader); }
+  .sw-memmap { background: var(--memmap); }
+  .sw-kernel { background: var(--kernel); }
+  .sw-free { background: var(--free); }
+
+  .verdict { margin-top: 12px; font-size: 14px; padding: 10px 14px; border-radius: 10px; display: none; }
+  .verdict.ok { display: block; color: var(--ok); background: var(--ok-soft); border: 1px solid var(--ok); }
+  .verdict.bad { display: block; color: var(--bad); background: var(--bad-soft); border: 1px solid var(--bad); }
+
+  footer { max-width: 1100px; margin: 0 auto; padding: 0 24px 60px; color: var(--ink-soft); font-size: 13px; }
+</style>
 </head>
 <body>
-<h1>ignition</h1>
-<p>Site coming soon.</p>
-<p><a href="https://github.com/pavanchow/ignition">View repository</a></p>
+<header>
+  <h1>Ignition</h1>
+  <p class="tag">A deterministic boot sequence you can step through: firmware, stage 1, stage 2, the partition table, the boot config, and an ELF-like kernel image loaded segment by segment into memory, then the real-mode to protected-mode switch and the jump to the entry point.</p>
+  <p class="honest">Honest framing: a real bootloader runs on bare metal and cannot run in a browser or be unit tested. This page is a teaching-accurate model of the boot chain, and it mirrors the real Rust parsers and loader in the <a href="https://github.com/pavanchow/ignition">Ignition repository</a>. It is not a bootable artifact.</p>
+</header>
+
+<main>
+  <section class="card how">
+    <h2>How to use this playground</h2>
+    <ol>
+      <li><span class="kbd">Step</span> advances the boot by exactly one stage. Watch the highlighted stage pill, the new console line, and the panels below fill in.</li>
+      <li><span class="kbd">Run</span> plays the remaining stages automatically, about one every 700 ms. Press it again to pause.</li>
+      <li><span class="kbd">Reset</span> returns the machine to power-on so you can start again.</li>
+      <li>The <span class="kbd">Disk image</span> menu swaps the disk. Pick a malformed image to watch a specific parser or the loader reject it instead of loading a corrupt kernel.</li>
+    </ol>
+    <div class="tour">
+      Guided tour: start with the valid image and press <span class="kbd">Step</span> seven times to reach the kernel header. Keep stepping and watch the memory map fill, one segment at a time, with the pure bss segment showing its zero-filled bytes. Two more steps flip the CPU chip from real mode to protected mode and jump to the entry point, where the stub kernel prints its proof of life. Then choose <span class="kbd">bad ELF magic</span> from the menu, reset, and step through again to see the loader refuse the image.
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Controls</h2>
+    <div class="controls">
+      <button id="step">Step</button>
+      <button id="run" class="secondary">Run</button>
+      <button id="reset" class="secondary">Reset</button>
+      <label class="sel">Disk image
+        <select id="image">
+          <option value="valid">valid (boots)</option>
+          <option value="badsig">bad boot signature</option>
+          <option value="badmagic">bad ELF magic</option>
+          <option value="oor">segment out of range</option>
+          <option value="overlap">overlapping segments</option>
+          <option value="trunc">truncated image</option>
+        </select>
+      </label>
+    </div>
+    <div class="stage-row" id="stages"></div>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Boot transcript</h2>
+      <div class="cpu">
+        <span>CPU</span>
+        <span class="chip real" id="cpuchip">real mode</span>
+        <span class="arrow">to</span>
+        <span class="chip" id="a20chip">A20 masked</span>
+      </div>
+      <div class="console" id="console"></div>
+      <div class="verdict" id="verdict"></div>
+    </section>
+
+    <section class="card">
+      <h2>Parsed headers</h2>
+      <table class="hdr" id="headers"><tbody></tbody></table>
+      <h2 style="margin-top:18px">Memory map after load</h2>
+      <div class="mm" id="memmap"></div>
+    </section>
+  </div>
+</main>
+
+<footer>
+  Source, the real parsers, and the correctness gate live at <a href="https://github.com/pavanchow/ignition">github.com/pavanchow/ignition</a>.
+</footer>
+
+<script>
+"use strict";
+(function () {
+  const hex = (n, w) => "0x" + n.toString(16).padStart(w || 0, "0");
+
+  // The demo kernel image, mirroring src/image.rs demo_kernel_image().
+  function demoSegments() {
+    return [
+      { name: ".text",   vaddr: 0x100000, filesz: 19, memsz: 19,   flags: "r-x" },
+      { name: ".rodata", vaddr: 0x101000, filesz: 35, memsz: 35,   flags: "r--" },
+      { name: ".bss",    vaddr: 0x102000, filesz: 0,  memsz: 4096, flags: "rw-" }
+    ];
+  }
+  const ENTRY = 0x100000;
+  const RAM = 16 * 1024 * 1024;
+
+  // Where each malformed image fails, mirroring the Rust rejection paths.
+  const FAIL = {
+    valid:   null,
+    badsig:  { at: "stage1", msg: "sector 0 has no 0x55AA boot signature" },
+    badmagic:{ at: "elf",    msg: "kernel image error: bad kernel magic: found [58, 49, 4d, 47]" },
+    oor:     { at: "elf",    msg: "kernel image error: segment 2 memory range exceeds RAM" },
+    overlap: { at: "elf",    msg: "kernel image error: segments 0 and 1 overlap in virtual memory" },
+    trunc:   { at: "elf",    msg: "kernel image error: segment 2 file range exceeds image bytes" }
+  };
+
+  // The full ordered stage list.
+  const STAGES = [
+    { key: "post",    label: "post" },
+    { key: "stage1",  label: "stage1" },
+    { key: "stage2",  label: "stage2" },
+    { key: "parttab", label: "parttab" },
+    { key: "igfs",    label: "igfs" },
+    { key: "config",  label: "config" },
+    { key: "elf",     label: "elf" },
+    { key: "load0",   label: "load .text" },
+    { key: "load1",   label: "load .rodata" },
+    { key: "load2",   label: "load .bss" },
+    { key: "memmap",  label: "memmap" },
+    { key: "cpu",     label: "cpu switch" },
+    { key: "handoff", label: "handoff" },
+    { key: "kernel",  label: "kernel" }
+  ];
+
+  const el = {
+    stages: document.getElementById("stages"),
+    console: document.getElementById("console"),
+    headers: document.querySelector("#headers tbody"),
+    memmap: document.getElementById("memmap"),
+    cpuchip: document.getElementById("cpuchip"),
+    a20chip: document.getElementById("a20chip"),
+    verdict: document.getElementById("verdict"),
+    step: document.getElementById("step"),
+    run: document.getElementById("run"),
+    reset: document.getElementById("reset"),
+    image: document.getElementById("image")
+  };
+
+  let state, timer = null;
+
+  function fresh() {
+    return {
+      idx: -1,            // last completed stage index
+      failed: false,
+      done: false,
+      loaded: [],         // segments placed so far
+      mm: [],             // memory map regions revealed so far
+      image: el.image.value
+    };
+  }
+
+  function log(line, cls) {
+    const span = document.createElement("span");
+    if (cls) span.className = cls;
+    span.textContent = line + "\n";
+    el.console.appendChild(span);
+    el.console.scrollTop = el.console.scrollHeight;
+  }
+
+  function addHeaderRow(k, v) {
+    const tr = document.createElement("tr");
+    const td1 = document.createElement("td"); td1.className = "k"; td1.textContent = k;
+    const td2 = document.createElement("td"); td2.textContent = v;
+    tr.appendChild(td1); tr.appendChild(td2);
+    el.headers.appendChild(tr);
+  }
+
+  function addRegion(lbl, base, size, kind, bss) {
+    const div = document.createElement("div");
+    div.className = "region";
+    const sw = document.createElement("span"); sw.className = "swatch sw-" + kind;
+    const l = document.createElement("span"); l.className = "lbl"; l.textContent = lbl;
+    const r = document.createElement("span"); r.className = "rng";
+    r.textContent = hex(base, 6) + " .. " + hex(base + size, 6) + "  (" + size + " B)";
+    div.appendChild(sw); div.appendChild(l); div.appendChild(r);
+    if (bss) {
+      const b = document.createElement("span"); b.className = "bss";
+      b.textContent = "bss +" + bss + " zeroed";
+      div.appendChild(b);
+    }
+    el.memmap.appendChild(div);
+    requestAnimationFrame(() => div.classList.add("show"));
+  }
+
+  function renderStages() {
+    el.stages.innerHTML = "";
+    STAGES.forEach((s, i) => {
+      const p = document.createElement("span");
+      p.className = "pill";
+      if (state.failed && i === state.idx) p.classList.add("failed");
+      else if (i <= state.idx) p.classList.add("done");
+      else if (i === state.idx + 1 && !state.done && !state.failed) p.classList.add("active");
+      p.textContent = s.label;
+      el.stages.appendChild(p);
+    });
+  }
+
+  function fail(msg) {
+    state.failed = true;
+    log("[error] " + msg, "err");
+    el.verdict.className = "verdict bad";
+    el.verdict.textContent = "Rejected: " + msg + ". No partial load happened, the machine halts.";
+    stopRun();
+    updateButtons();
+    renderStages();
+  }
+
+  // Perform the stage at index i. Returns false if it halted with an error.
+  function perform(i) {
+    const stage = STAGES[i];
+    const fdef = FAIL[state.image];
+
+    switch (stage.key) {
+      case "post":
+        log("[" + "post" + "] firmware online, " + RAM + " bytes RAM, CPU in real mode");
+        break;
+      case "stage1":
+        if (fdef && fdef.at === "stage1") { state.idx = i; renderStages(); return fail(fdef.msg), false; }
+        log("[stage1] boot sector loaded at 0x7c00, signature 0x55AA ok");
+        break;
+      case "stage2":
+        log("[stage2] loaded 1 sector from LBA 1 to 0x8000");
+        break;
+      case "parttab":
+        log("[parttab] bootable partition type 0x7f at LBA 2, 1 sector");
+        addHeaderRow("partition", "boot, type 0x7f, start LBA 2");
+        break;
+      case "igfs":
+        log("[igfs] superblock ok, config 93 bytes, kernel 162 bytes");
+        break;
+      case "config":
+        log("[config] kernel=/boot/vmignition cmdline=\"quiet loglevel=3\" timeout=5");
+        addHeaderRow("config.kernel", "/boot/vmignition");
+        addHeaderRow("config.cmdline", "quiet loglevel=3");
+        break;
+      case "elf":
+        if (fdef && fdef.at === "elf") { state.idx = i; renderStages(); return fail(fdef.msg), false; }
+        log("[elf] magic KIMG v1, entry " + hex(ENTRY, 0) + ", 3 segments");
+        addHeaderRow("kernel.magic", "KIMG v1");
+        addHeaderRow("kernel.entry", hex(ENTRY, 0));
+        demoSegments().forEach((s, n) =>
+          addHeaderRow("ph[" + n + "]", "vaddr " + hex(s.vaddr, 0) + " filesz " + s.filesz + " memsz " + s.memsz + " [" + s.flags + "]"));
+        break;
+      case "load0":
+      case "load1":
+      case "load2": {
+        const n = Number(stage.key.slice(4));
+        const s = demoSegments()[n];
+        const bss = s.memsz - s.filesz;
+        log("[load] segment " + n + ": " + s.filesz + " bytes file + " + bss + " bytes bss at " + hex(s.vaddr, 0) + " [" + s.flags + "]");
+        state.loaded.push(s);
+        addRegion(s.name, s.vaddr, s.memsz, "kernel", bss);
+        break;
+      }
+      case "memmap":
+        // Reveal the fixed reserved and loader regions around the kernel ones.
+        addRegion("reserved", 0x0, 0x1000, "reserved", 0);
+        addRegion("loader", 0x7c00, 0x200, "loader", 0);
+        addRegion("loader", 0x8000, 0x200, "loader", 0);
+        addRegion("memmap", 0x9000, 0xa4, "memmap", 0);
+        addRegion("free", 0x103000, RAM - 0x103000, "free", 0);
+        log("[memmap] 8 regions written to 0x9000 (164 bytes)");
+        break;
+      case "cpu":
+        log("[cpu] A20 enabled, entered protected mode");
+        el.cpuchip.textContent = "protected mode";
+        el.cpuchip.className = "chip prot";
+        el.a20chip.textContent = "A20 enabled";
+        el.a20chip.className = "chip prot";
+        break;
+      case "handoff":
+        log("[handoff] jump to entry " + hex(ENTRY, 0) + " in protected mode");
+        break;
+      case "kernel":
+        log("[kernel] 'IGNITED' running, read 8 memory map regions, boot complete");
+        state.done = true;
+        el.verdict.className = "verdict ok";
+        el.verdict.textContent = "Boot complete. The stub kernel ran after hand off and read the memory map the loader left for it.";
+        break;
+    }
+    state.idx = i;
+    renderStages();
+    return true;
+  }
+
+  function stepOnce() {
+    if (state.failed || state.done) return;
+    const next = state.idx + 1;
+    if (next >= STAGES.length) return;
+    const ok = perform(next);
+    updateButtons();
+    if (!ok) return;
+    if (state.done) stopRun();
+  }
+
+  function updateButtons() {
+    const atEnd = state.done || state.failed || state.idx + 1 >= STAGES.length;
+    el.step.disabled = atEnd;
+    el.run.disabled = atEnd;
+  }
+
+  function startRun() {
+    if (timer) return;
+    el.run.textContent = "Pause";
+    timer = setInterval(() => {
+      if (state.done || state.failed || state.idx + 1 >= STAGES.length) { stopRun(); return; }
+      stepOnce();
+    }, 700);
+  }
+  function stopRun() {
+    if (timer) { clearInterval(timer); timer = null; }
+    el.run.textContent = "Run";
+  }
+
+  function reset() {
+    stopRun();
+    state = fresh();
+    el.console.innerHTML = "";
+    el.headers.innerHTML = "";
+    el.memmap.innerHTML = "";
+    el.verdict.className = "verdict";
+    el.verdict.textContent = "";
+    el.cpuchip.textContent = "real mode"; el.cpuchip.className = "chip real";
+    el.a20chip.textContent = "A20 masked"; el.a20chip.className = "chip";
+    log("machine powered on, disk image: " + state.image);
+    renderStages();
+    updateButtons();
+  }
+
+  el.step.addEventListener("click", stepOnce);
+  el.run.addEventListener("click", () => { if (timer) stopRun(); else startRun(); });
+  el.reset.addEventListener("click", reset);
+  el.image.addEventListener("change", reset);
+
+  reset();
+})();
+</script>
 </body>
 </html>
