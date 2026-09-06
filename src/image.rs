@@ -4,7 +4,7 @@
 use crate::bytes::write_u32;
 use crate::disk::SECTOR_SIZE;
 use crate::elf::{self, SegmentSpec, FLAG_R, FLAG_W, FLAG_X};
-use crate::igfs::{SuperBlock, SUPERBLOCK_SIZE};
+use crate::igfs::{FileExtent, SuperBlock, SUPERBLOCK_SIZE};
 use crate::partition::{BOOTABLE_FLAG, MBR_SIGNATURE, PARTITION_TABLE_OFFSET};
 
 /// Magic marking the stage 1 boot sector.
@@ -33,24 +33,37 @@ pub fn build_stage2() -> Vec<u8> {
     s
 }
 
-/// Build the partition payload: superblock, then config text, then kernel image.
+/// Build the partition payload: superblock, config text, then one or two kernel
+/// images laid out back to back. Passing a slot B image enables A/B fallback.
 #[must_use]
-pub fn build_partition(config_text: &str, kernel_image: &[u8]) -> Vec<u8> {
+pub fn build_partition(config_text: &str, kernel_a: &[u8], kernel_b: Option<&[u8]>) -> Vec<u8> {
     let config_bytes = config_text.as_bytes();
     let config_offset = SUPERBLOCK_SIZE;
-    let kernel_offset = config_offset + config_bytes.len();
+    let kernel_a_offset = config_offset + config_bytes.len();
+    let kernel_b_offset = kernel_a_offset + kernel_a.len();
 
     let sb = SuperBlock {
-        config_offset: config_offset as u32,
-        config_len: config_bytes.len() as u32,
-        kernel_offset: kernel_offset as u32,
-        kernel_len: kernel_image.len() as u32,
+        config: FileExtent {
+            offset: config_offset as u32,
+            len: config_bytes.len() as u32,
+        },
+        kernel_a: FileExtent {
+            offset: kernel_a_offset as u32,
+            len: kernel_a.len() as u32,
+        },
+        kernel_b: match kernel_b {
+            Some(b) => FileExtent { offset: kernel_b_offset as u32, len: b.len() as u32 },
+            None => FileExtent { offset: 0, len: 0 },
+        },
     };
 
     let mut part = Vec::new();
     part.extend_from_slice(&sb.encode());
     part.extend_from_slice(config_bytes);
-    part.extend_from_slice(kernel_image);
+    part.extend_from_slice(kernel_a);
+    if let Some(b) = kernel_b {
+        part.extend_from_slice(b);
+    }
     let padded = round_up(part.len().max(1), SECTOR_SIZE);
     part.resize(padded, 0);
     part
@@ -79,11 +92,17 @@ pub fn build_mbr(partition_sectors: u32) -> Vec<u8> {
     mbr
 }
 
-/// Assemble a complete disk image from a boot config and a kernel image.
+/// Assemble a complete disk image from a boot config and a single kernel image.
 #[must_use]
 pub fn build_disk(config_text: &str, kernel_image: &[u8]) -> Vec<u8> {
+    build_disk_ab(config_text, kernel_image, None)
+}
+
+/// Assemble a complete disk image with an A slot and an optional B fallback slot.
+#[must_use]
+pub fn build_disk_ab(config_text: &str, kernel_a: &[u8], kernel_b: Option<&[u8]>) -> Vec<u8> {
     let stage2 = build_stage2();
-    let partition = build_partition(config_text, kernel_image);
+    let partition = build_partition(config_text, kernel_a, kernel_b);
     let partition_sectors = (partition.len() / SECTOR_SIZE) as u32;
     let mbr = build_mbr(partition_sectors);
 
@@ -141,4 +160,20 @@ pub fn demo_kernel_image() -> Vec<u8> {
 #[must_use]
 pub fn build_demo_disk() -> Vec<u8> {
     build_disk(&demo_config(), &demo_kernel_image())
+}
+
+/// A copy of the demo kernel image with its magic corrupted, so it always fails
+/// to load. Used to demonstrate A/B fallback.
+#[must_use]
+pub fn corrupt_kernel_image() -> Vec<u8> {
+    let mut img = demo_kernel_image();
+    img[0] = b'X';
+    img
+}
+
+/// Build a demo disk whose slot A is corrupt and whose slot B is the good demo
+/// kernel, so a boot of this image falls back from A to B.
+#[must_use]
+pub fn build_ab_demo_disk() -> Vec<u8> {
+    build_disk_ab(&demo_config(), &corrupt_kernel_image(), Some(&demo_kernel_image()))
 }

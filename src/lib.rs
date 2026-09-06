@@ -16,6 +16,17 @@
 //! - [`boot`] walks every stage in order and produces a deterministic report.
 //! - [`image`] assembles disk images, the inverse of the parsers.
 
+#![warn(clippy::pedantic)]
+// The crate deals in 32-bit on-disk quantities and identity-mapped addresses
+// that are validated against the size of RAM before use, so the width casts
+// between usize, u32, and u64 are intentional and bounds-checked in context.
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_possible_wrap)]
+// Error conditions are documented through the BootError and ElfError variants
+// and the surrounding prose rather than a per-function Errors section.
+#![allow(clippy::missing_errors_doc)]
+
 pub mod boot;
 pub mod bytes;
 pub mod config;

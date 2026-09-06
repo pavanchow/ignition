@@ -1,17 +1,20 @@
 //! The Ignition command line tool: boot a disk image and print the whole chain.
 
+#![warn(clippy::pedantic)]
+
 use std::process::ExitCode;
 
 use ignition::boot::{boot_default, BootReport};
 use ignition::disk::Disk;
-use ignition::image::build_demo_disk;
+use ignition::image::{build_ab_demo_disk, build_demo_disk};
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
-    let command = args.get(1).map(String::as_str).unwrap_or("help");
+    let command = args.get(1).map_or("help", String::as_str);
 
     match command {
         "demo" => run_boot(build_demo_disk()),
+        "ab-demo" => run_boot(build_ab_demo_disk()),
         "boot" => match args.get(2) {
             Some(path) => match std::fs::read(path) {
                 Ok(bytes) => run_boot(bytes),
@@ -109,6 +112,7 @@ fn print_report(report: &BootReport) {
     println!("  cpu mode   = {:?}", report.machine.cpu.mode);
     println!("  a20        = {}", report.machine.cpu.a20);
     println!("  entry (ip) = {:#x}", report.machine.cpu.ip);
+    println!("  boot slot  = {}", report.booted_slot.label());
     println!(
         "  kernel     = '{}' saw {} memory map region(s)",
         report.outcome.marker, report.outcome.regions_seen
@@ -121,6 +125,7 @@ fn print_help() {
     println!();
     println!("usage:");
     println!("  ignition demo           boot the bundled demo disk image");
+    println!("  ignition ab-demo        boot a disk whose slot A is corrupt (falls back to B)");
     println!("  ignition boot [image]   boot a disk image file (or the demo if omitted)");
     println!("  ignition help           show this help");
     println!();

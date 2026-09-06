@@ -82,6 +82,12 @@ pub enum BootError {
     Config(String),
     /// The kernel image failed parsing or loading.
     Elf(ElfError),
+    /// A kernel segment would land on memory the loader reserves for itself.
+    KernelPlacement { vaddr: u64, memsz: u32, reserved_end: u64 },
+    /// The loader scratch area cannot hold the memory map for this many segments.
+    LoaderCapacity { needed: u64, available: u64 },
+    /// Both boot slots failed to produce a loadable kernel image.
+    AllSlotsFailed { slot_a: String, slot_b: String },
     /// A memory access fell outside the simulated RAM.
     Memory(String),
     /// A disk access fell outside the image.
@@ -105,6 +111,17 @@ impl fmt::Display for BootError {
             BootError::Filesystem(m) => write!(f, "filesystem error: {m}"),
             BootError::Config(m) => write!(f, "boot config error: {m}"),
             BootError::Elf(e) => write!(f, "kernel image error: {e}"),
+            BootError::KernelPlacement { vaddr, memsz, reserved_end } => write!(
+                f,
+                "kernel segment [{vaddr:#x}, +{memsz}) overlaps loader reserved memory below {reserved_end:#x}"
+            ),
+            BootError::LoaderCapacity { needed, available } => write!(
+                f,
+                "loader scratch overflow: memory map needs {needed} bytes, only {available} available"
+            ),
+            BootError::AllSlotsFailed { slot_a, slot_b } => {
+                write!(f, "all boot slots failed: slot A ({slot_a}), slot B ({slot_b})")
+            }
             BootError::Memory(m) => write!(f, "memory error: {m}"),
             BootError::Disk(m) => write!(f, "disk error: {m}"),
             BootError::Handoff(m) => write!(f, "hand off error: {m}"),

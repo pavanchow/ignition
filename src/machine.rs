@@ -14,9 +14,14 @@ pub const STAGE2_LOAD_ADDR: u64 = 0x8000;
 /// Where the loader writes the memory map for the kernel.
 pub const MEMMAP_ADDR: u64 = 0x9000;
 /// Where the stub kernel writes its result marker.
-pub const KERNEL_OUTPUT_ADDR: u64 = 0x9800;
+pub const KERNEL_OUTPUT_ADDR: u64 = 0xF000;
 /// End of the low memory range reserved for firmware.
 pub const LOW_RESERVED_END: u64 = 0x1000;
+/// End of the low memory the loader keeps for itself (boot sector, stage 2, the
+/// memory map, and the kernel output slot). A kernel image must load at or above
+/// this address, mirroring how real bootloaders place protected mode kernels in
+/// high memory and leave conventional low memory to the firmware and loader.
+pub const LOADER_RESERVED_END: u64 = 0x0001_0000;
 
 /// The whole simulated machine.
 #[derive(Clone, Debug)]

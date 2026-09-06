@@ -37,7 +37,7 @@ pub struct KernelOutcome {
 /// A loaded kernel that can be run after hand off.
 pub trait Kernel {
     /// A short name for logging.
-    fn name(&self) -> &str;
+    fn name(&self) -> &'static str;
     /// Run the kernel, given the machine and the hand off state.
     fn run(&self, machine: &mut Machine, handoff: &Handoff) -> BootResult<KernelOutcome>;
 }
@@ -47,7 +47,7 @@ pub trait Kernel {
 pub struct StubKernel;
 
 impl Kernel for StubKernel {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "stub"
     }
 

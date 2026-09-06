@@ -9,13 +9,24 @@
 //! CI stays fast and reproducible: `IGNITION_FUZZ_OPS` sets the iteration count
 //! and `IGNITION_FUZZ_SEED` sets the starting seed.
 
-use ignition::boot::boot_default;
+#![warn(clippy::pedantic)]
+// Bounded arithmetic on small known values, casts are intentional in context.
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_possible_wrap)]
+
+use ignition::boot::{boot_default, BootSlot};
 use ignition::disk::Disk;
 use ignition::elf::{
-    build_image, load, SegmentSpec, FLAG_R, FLAG_W, FLAG_X, HEADER_SIZE, PROGRAM_HEADER_SIZE,
+    build_image, load, parse_header, parse_program_headers, SegmentSpec, FLAG_R, FLAG_W, FLAG_X,
+    HEADER_SIZE, PROGRAM_HEADER_SIZE,
 };
 use ignition::error::{BootError, ElfError};
-use ignition::image::{build_demo_disk, build_disk, demo_kernel_image};
+use ignition::image::{
+    build_ab_demo_disk, build_demo_disk, build_disk, build_disk_ab, corrupt_kernel_image,
+    demo_kernel_image,
+};
+use ignition::machine::LOADER_RESERVED_END;
 use ignition::memory::Memory;
 
 /// A tiny deterministic PRNG (xorshift64star) so runs are reproducible.
@@ -313,4 +324,82 @@ fn config_selects_kernel_and_boots() {
 fn assert_no_partial_load(mem: &Memory) {
     let all = mem.read(0, mem.size()).unwrap();
     assert!(all.iter().all(|&b| b == 0), "memory was partially written on a rejected image");
+}
+
+/// A kernel segment aimed at loader reserved low memory must be rejected before
+/// anything is written, so the memory map can never claim a byte twice.
+#[test]
+fn gate_reject_kernel_in_reserved_memory() {
+    for vaddr in [0u64, 0x7c00, 0x8000, 0x9000, LOADER_RESERVED_END - 1] {
+        let seg = SegmentSpec { vaddr, memsz: 256, flags: FLAG_R | FLAG_X, data: vec![0xEE; 16] };
+        let kernel = build_image(vaddr, &[seg]);
+        let disk = Disk::from_image(build_disk("kernel = /k\n", &kernel)).unwrap();
+        let err = boot_default(disk).unwrap_err();
+        assert!(
+            matches!(err, BootError::KernelPlacement { .. }),
+            "segment at {vaddr:#x} should be rejected as placement, got {err}"
+        );
+    }
+    // A segment exactly at the reserved boundary is allowed.
+    let ok = SegmentSpec {
+        vaddr: LOADER_RESERVED_END,
+        memsz: 256,
+        flags: FLAG_R | FLAG_X,
+        data: vec![0xEE; 16],
+    };
+    let kernel = build_image(LOADER_RESERVED_END, &[ok]);
+    let disk = Disk::from_image(build_disk("kernel = /k\n", &kernel)).unwrap();
+    assert!(boot_default(disk).is_ok(), "segment at the reserved boundary must boot");
+}
+
+/// The flagship atomicity gate: when slot A is corrupt, the loader falls back to
+/// slot B, and RAM must match an independent reference built from slot B's
+/// headers exactly. Any byte left behind by the failed slot A load would make
+/// this reference comparison fail, so a pass proves the rejection was atomic.
+#[test]
+fn gate_ab_fallback_is_atomic() {
+    let disk = Disk::from_image(build_ab_demo_disk()).unwrap();
+    let report = boot_default(disk).expect("ab demo must fall back and boot");
+    assert_eq!(report.booted_slot, BootSlot::B, "should have booted the fallback slot");
+
+    // Independent reference: only slot B's declared segment writes over zeroed RAM.
+    let good = demo_kernel_image();
+    let header = parse_header(&good).unwrap();
+    let headers = parse_program_headers(&good, &header).unwrap();
+    let ram = report.machine.memory.size();
+    let mut reference = vec![0u8; ram];
+    for h in &headers {
+        let start = h.vaddr as usize;
+        let file = &good[h.offset as usize..h.offset as usize + h.filesz as usize];
+        reference[start..start + file.len()].copy_from_slice(file);
+    }
+    // The loader also writes the boot sector, stage 2, and the memory map into
+    // reserved low memory, so compare only the region a kernel can occupy.
+    let boundary = LOADER_RESERVED_END as usize;
+    let actual = report.machine.memory.read(0, ram).unwrap();
+    assert!(
+        actual[boundary..] == reference[boundary..],
+        "fallback RAM above the reserved boundary differs from slot B reference"
+    );
+}
+
+/// When both slots are corrupt the boot fails cleanly with both errors named.
+#[test]
+fn gate_reject_when_all_slots_fail() {
+    let disk = Disk::from_image(build_disk_ab(
+        "kernel = /k\n",
+        &corrupt_kernel_image(),
+        Some(&corrupt_kernel_image()),
+    ))
+    .unwrap();
+    let err = boot_default(disk).unwrap_err();
+    assert!(matches!(err, BootError::AllSlotsFailed { .. }), "expected AllSlotsFailed, got {err}");
+}
+
+/// A single corrupt slot with no fallback surfaces the real underlying error.
+#[test]
+fn gate_reject_single_corrupt_slot() {
+    let disk = Disk::from_image(build_disk("kernel = /k\n", &corrupt_kernel_image())).unwrap();
+    let err = boot_default(disk).unwrap_err();
+    assert!(matches!(err, BootError::Elf(ElfError::BadMagic { .. })), "got {err}");
 }
