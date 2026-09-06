@@ -22,7 +22,7 @@ The orchestrator in `boot.rs` walks the chain in order and appends one log line 
 4. Partition table. Stage 2 parses the MBR partition table and selects the bootable partition.
 5. Filesystem. Stage 2 reads a mini filesystem superblock at the start of the partition. The superblock records where the boot config and the kernel image live.
 6. Boot config. Stage 2 reads and parses the config text, which names the kernel path and its options.
-7. Kernel load. Stage 2 reads the kernel image, parses the header and the program headers, then loads each segment into memory and zero-fills the bss.
+7. Kernel load. Stage 2 reads the primary kernel image from slot A, parses the header and the program headers, checks that no segment lands on loader reserved memory, then loads each segment into memory and zero-fills the bss. If slot A fails at any of these steps, the loader falls back to slot B and loads it into the same clean RAM.
 8. Memory map. The loader builds a sorted memory map describing reserved, loader, kernel, memory-map, and free regions, and writes it into RAM for the kernel to read.
 9. Mode switch. The loader enables the A20 line and moves the CPU from real mode to protected mode.
 10. Hand-off. The loader confirms the entry point sits inside an executable segment, sets the instruction pointer, and jumps. A stub kernel runs, reads the memory map, and writes a proof-of-life marker back into RAM.
@@ -41,7 +41,7 @@ The config is a small key equals value text format, one directive per line, with
 
 ### Mini filesystem superblock
 
-So stage 2 can find files the way a real second stage reads a filesystem, the partition begins with a 24 byte superblock. It carries a magic, a version, and the byte offset and length of both the config and the kernel image within the partition. Parsing rejects a bad magic, an unsupported version, a short input, and a zero-length file.
+So stage 2 can find files the way a real second stage reads a filesystem, the partition begins with a 32 byte superblock. It carries a magic, a version, and the byte offset and length of three files within the partition, the config, the primary kernel image in slot A, and an optional fallback kernel image in slot B. A slot B length of zero means there is no fallback. Parsing rejects a bad magic, an unsupported version, a short input, a zero-length config, and a zero-length slot A. It also rejects any extent that starts inside the superblock, that runs past the end of the partition, or that overlaps another extent, so a crafted superblock cannot point a read outside its partition or make the config and a kernel alias one another.
 
 ### Kernel image, ELF-like
 
@@ -63,6 +63,14 @@ The loader is the testable core. It runs in a strict order so a rejected image n
 
 Because all validation and the entry check happen before the first write, a rejected image leaves memory exactly as it was. The gate checks that property directly.
 
+The ELF loader itself is placement agnostic. It only requires that segments fit in RAM and do not overlap. The bootloader layer adds one more rule before it calls the loader. A kernel segment may not land on the low memory the loader keeps for itself, which holds the boot sector, stage 2, the memory map, and the kernel output slot. Real bootloaders place protected mode kernels in high memory for exactly this reason, and the demo kernel loads at one megabyte. This check runs on the parsed program headers before any byte is written, so a kernel aimed at loader memory is rejected atomically rather than being loaded and then silently overwritten by the memory map. A second check rejects an image with more segments than the loader scratch area can describe.
+
+## A/B boot slots and fallback
+
+Real update systems keep two copies of the kernel so a bad image cannot brick the machine. Ignition models the same idea. The superblock names a slot A and an optional slot B. The loader tries slot A first. If slot A fails to read, parse, place, or load, the loader falls back to slot B and loads it into the same RAM.
+
+The fallback leans on the atomicity property directly. Because a failed slot A load leaves RAM exactly as it was, slot B loads into clean memory and the result is identical to a machine that only ever had slot B. A single-slot disk surfaces the real underlying error when its only kernel is bad. A two-slot disk whose slots both fail reports both errors together. The `BootReport` records which slot actually booted.
+
 ## The mode transition and hand-off
 
 A real machine starts in 16 bit real mode with only the low megabyte reachable because the A20 line is masked. Moving to a modern kernel means enabling A20 and setting the protection enable bit to reach 32 bit protected mode. Ignition models this as explicit, checkable state. The switch fails if A20 is still masked and it fails if the machine is already in protected mode, so the ordering is enforced rather than assumed.
@@ -78,5 +86,11 @@ Gate 1, load correctness. It builds random valid images with non-overlapping seg
 Gate 2, validation and rejection. It constructs one malformed input per failure mode, a bad boot signature, a bad kernel magic, a segment that exceeds memory, overlapping segments, a memory size smaller than the file size, an entry outside an executable segment, and a truncated image. For each it asserts the exact error variant and asserts that memory is still entirely zero, which proves no partial load occurred.
 
 Gate 3, boot sequence and determinism. It boots the demo disk and asserts the stages appear in the correct order, the stub kernel ran, the CPU ended in protected mode with A20 enabled and the instruction pointer at the entry point, and the demo bss segment is zeroed. It then boots two identical disks and asserts the logs, the memory maps, and the full memory images are byte-for-byte equal, which proves the run is deterministic.
+
+Gate 4, placement and A/B fallback. It confirms that a kernel segment aimed at each loader reserved address is rejected with a placement error while a segment exactly at the reserved boundary boots. It then boots a disk whose slot A is corrupt and whose slot B is good, asserts the fallback slot booted, and compares the whole RAM above the reserved boundary against an independent reference for slot B. Any byte left behind by the failed slot A load would break that comparison, so a pass proves the rejection was atomic end to end.
+
+## The stress harness
+
+`tests/stress.rs` is a bounded, seeded fuzz harness that runs as part of the suite and scales through `IGNITION_FUZZ_OPS` and `IGNITION_FUZZ_SEED`. It has five phases. Phase A checks load correctness over random layouts against an independent reference. Phase B throws malformed images at the loader, every header field corrupted, truncations, overlaps, and boundary values, and asserts every rejection is clean and atomic and every acceptance loads exactly what its headers declare. Phase C boots random disks, aims half of them at reserved memory, and asserts the map is sorted, disjoint, and inside RAM on success and a clean error on failure. Phase D corrupts slot A every way and asserts the fallback to slot B is byte-for-byte correct. Phase E drives explicit u32 and u64 boundary values through every field and confirms nothing panics. Structures are capped and each iteration drops its RAM before the next, so the harness has a bounded footprint no matter the op count.
 
 The fuzz iteration count and seed come from `IGNITION_FUZZ_OPS` and `IGNITION_FUZZ_SEED`, so CI stays bounded and every run is reproducible.

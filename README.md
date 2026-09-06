@@ -18,11 +18,12 @@ Most people learn how a computer boots from prose and diagrams. The interesting 
 
 ```
 cargo run -- demo          # boot the bundled demo disk and print the whole chain
+cargo run -- ab-demo       # boot a disk whose A slot is corrupt and watch it fall back to B
 cargo run -- boot IMAGE    # boot a disk image file
-cargo test                 # run the unit tests and the correctness gate
+cargo test                 # run the unit tests, the correctness gate, and the stress harness
 ```
 
-A demo run walks firmware, stage 1, stage 2, the partition table, the mini filesystem, the boot config, the kernel image load with per-segment logging, the memory map, the real-mode to protected-mode switch, and the hand-off to a stub kernel that proves it ran.
+A demo run walks firmware, stage 1, stage 2, the partition table, the mini filesystem, the boot config, the kernel image load with per-segment logging, the memory map, the real-mode to protected-mode switch, and the hand-off to a stub kernel that proves it ran. The ab-demo run adds an A/B slot fallback, where a corrupt primary kernel is rejected atomically and the loader boots the fallback slot instead.
 
 ## API
 
@@ -31,10 +32,10 @@ The crate is a library plus a thin CLI. The pieces mirror the boot chain.
 - `ignition::disk::Disk`, `ignition::memory::Memory`, `ignition::cpu::Cpu` make up `ignition::machine::Machine`.
 - `ignition::partition::parse_mbr` parses and validates an MBR-style partition table.
 - `ignition::config::parse_config` parses and validates the boot configuration text.
-- `ignition::igfs::parse_superblock` reads the mini filesystem superblock.
+- `ignition::igfs::parse_superblock` reads the mini filesystem superblock, which names the config and two kernel slots, A and B, and validates every extent against the partition bounds.
 - `ignition::elf` holds the kernel image format. `parse_header`, `parse_program_headers`, `validate_segments`, and `load` are the real parser and loader. `build_image` assembles an image, the inverse of `load`.
-- `ignition::image::build_disk` and `build_demo_disk` assemble a full disk image.
-- `ignition::boot::boot` and `boot_default` walk every stage and return a `BootReport` with the log, every parsed structure, the memory map, and the final machine state.
+- `ignition::image::build_disk` builds a single-slot disk, `build_disk_ab` builds an A/B disk, and `build_demo_disk` and `build_ab_demo_disk` assemble the bundled demos.
+- `ignition::boot::boot` and `boot_default` walk every stage and return a `BootReport` with the log, every parsed structure, the slot that booted, the memory map, and the final machine state.
 
 Minimal use:
 
@@ -52,16 +53,18 @@ for line in &report.log {
 
 ## The correctness gate
 
-The gate lives in `tests/gate.rs` and in per-module unit tests. It proves three claims.
+The gate lives in `tests/gate.rs`, the bounded stress harness in `tests/stress.rs`, and focused unit tests in each module. Together they prove five claims.
 
-1. Load correctness. For random valid kernel images, after loading, every segment's bytes are present at its virtual address, the bss beyond the file size is zeroed, the entry point matches the header, and nothing outside a declared segment is written. A build then load then read-back round trip matches.
-2. Validation and rejection. Malformed inputs are rejected rather than mis-loaded. A bad boot signature, a bad kernel magic, a segment that exceeds memory, overlapping segments, a memory size smaller than the file size, an entry point outside an executable segment, and a truncated image each produce a clear error and never a partial or corrupt load.
+1. Load correctness. For random valid kernel images, after loading, every segment's bytes are present at its virtual address, the bss beyond the file size is zeroed, the entry point matches the header, and nothing outside a declared segment is written. The whole RAM is compared byte for byte against an independent reference built from the parsed headers, not from the builder inputs.
+2. Validation and rejection. Malformed inputs are rejected rather than mis-loaded. A bad boot signature, a bad kernel magic, a segment that exceeds memory, overlapping segments, a memory size smaller than the file size, an entry point outside an executable segment, a truncated image, and a kernel segment aimed at loader reserved memory each produce a clear error and never a partial or corrupt load. After every rejection the RAM is asserted to be entirely zero.
 3. Boot sequence and determinism. The full chain completes in the correct order for a valid disk, the stub kernel runs after hand-off, and the same disk image always yields an identical log and memory map.
+4. A/B fallback atomicity. When the primary kernel slot is corrupt, the loader falls back to slot B, and the RAM after fallback equals an independent reference for slot B. That equality can only hold if the failed slot A load wrote nothing, so it proves the rejection was atomic under the feature that depends on it.
+5. Memory map soundness. Every successful boot produces a map whose regions are sorted, disjoint, and inside RAM, with the loader regions intact and every kernel segment covered by a matching kernel region.
 
 The fuzz loops are bounded for CI and controllable through environment variables. `IGNITION_FUZZ_OPS` sets the iteration count and `IGNITION_FUZZ_SEED` sets the starting seed, so runs stay fast and reproducible.
 
 ```
-IGNITION_FUZZ_OPS=5000 cargo test gate1_load_correctness_and_roundtrip
+IGNITION_FUZZ_OPS=5000 cargo test
 ```
 
 ## Design
