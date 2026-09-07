@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="logo.svg">
 <title>Ignition, a boot sequence you can step through</title>
 <style>
   :root {
@@ -169,18 +170,33 @@
   .verdict.bad { display: block; color: var(--bad); background: var(--bad-soft); border: 1px solid var(--bad); }
 
   footer { max-width: 1100px; margin: 0 auto; padding: 0 24px 60px; color: var(--ink-soft); font-size: 13px; }
+  .brandrow { display: flex; align-items: center; gap: 14px; margin: 0 0 6px; }
+  .brandrow h1 { margin: 0; }
+  details.how-d > summary {
+    cursor: pointer; list-style: none;
+    font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-soft);
+    display: flex; align-items: center; gap: 8px;
+  }
+  details.how-d > summary::-webkit-details-marker { display: none; }
+  details.how-d > summary::before { content: "▸"; color: var(--accent); }
+  details.how-d[open] > summary::before { content: "▾"; }
+  details.how-d > summary + * { margin-top: 14px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>Ignition</h1>
+  <div class="brandrow">
+    <img src="logo.svg" alt="Ignition logo" width="72" height="72">
+    <h1>Ignition</h1>
+  </div>
   <p class="tag">A deterministic boot sequence you can step through: firmware, stage 1, stage 2, the partition table, the boot config, and an ELF-like kernel image loaded segment by segment into memory, then the real-mode to protected-mode switch and the jump to the entry point.</p>
   <p class="honest">Honest framing: a real bootloader runs on bare metal and cannot run in a browser or be unit tested. This page is a teaching-accurate model of the boot chain, and it mirrors the real Rust parsers and loader in the <a href="https://github.com/pavanchow/ignition">Ignition repository</a>. It is not a bootable artifact.</p>
 </header>
 
 <main>
   <section class="card how">
-    <h2>How to use this playground</h2>
+    <details class="how-d">
+    <summary>How to use this playground</summary>
     <ol>
       <li><span class="kbd">Step</span> advances the boot by exactly one stage. Watch the highlighted stage pill, the new console line, and the panels below fill in.</li>
       <li><span class="kbd">Run</span> plays the remaining stages automatically, about one every 700 ms. Press it again to pause.</li>
@@ -190,6 +206,7 @@
     <div class="tour">
       Guided tour: start with the valid image and press <span class="kbd">Step</span> seven times to reach the kernel header. Keep stepping and watch the memory map fill, one segment at a time, with the pure bss segment showing its zero-filled bytes. Two more steps flip the CPU chip from real mode to protected mode and jump to the entry point, where the stub kernel prints its proof of life. Then choose <span class="kbd">bad ELF magic</span> from the menu, reset, and step through again to see the loader refuse the image.
     </div>
+    </details>
   </section>
 
   <section class="card">

@@ -1,3 +1,5 @@
+<img src="docs/logo.svg" alt="Ignition logo" width="96">
+
 # Ignition
 
 A deterministic boot sequence simulator written in pure, safe Rust with zero external dependencies, edition 2021.
