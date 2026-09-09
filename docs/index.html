@@ -3,26 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ignition: a deterministic boot sequence simulator in Rust</title>
-<meta name="description" content="Ignition by Pavan Nallamothu: a deterministic boot sequence simulator in pure, safe Rust with zero dependencies. Its MBR parser, boot config parser, and ELF-like kernel loader are real code checked by a correctness gate. Step the whole chain from firmware to kernel hand-off in your browser, or feed it a malformed disk and watch it reject the image.">
-<meta name="author" content="Pavan Nallamothu (pavanchow)">
-<meta name="keywords" content="bootloader, boot sequence, MBR parser, partition table, ELF loader, kernel image, boot config, A/B slots, protected mode, real mode, memory map, operating systems, deterministic simulator, Rust, zero dependencies, teaching, Pavan Nallamothu, pavanchow">
-<link rel="canonical" href="https://pavanchow.github.io/ignition/">
-<link rel="icon" type="image/svg+xml" href="logo.svg">
-<link rel="author" href="https://github.com/pavanchow">
-<meta property="og:type" content="website">
-<meta property="og:title" content="Ignition: a deterministic boot sequence simulator in Rust">
-<meta property="og:description" content="A teaching-accurate boot chain with real parsers and loader: firmware, stage 1, stage 2, MBR, mini filesystem, ELF-like kernel load, and the real to protected mode switch. By Pavan Nallamothu.">
-<meta property="og:url" content="https://pavanchow.github.io/ignition/">
-<meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Ignition: a deterministic boot sequence simulator in Rust">
-<meta name="twitter:description" content="Step a boot from power-on to kernel hand-off, segment by segment, then feed it a bad disk and watch the loader refuse it.">
-<script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Ignition","applicationCategory":"DeveloperApplication","operatingSystem":"Cross-platform","softwareVersion":"0.1.0","description":"Ignition is a deterministic boot sequence simulator written in pure, safe Rust with zero external dependencies. It models the whole boot chain from firmware power-on to kernel hand-off, and implements the genuinely testable parts as real code: an MBR partition table parser, a boot config parser, and an ELF-like kernel image loader, all checked against a correctness gate.","url":"https://pavanchow.github.io/ignition/","author":{"@type":"Person","name":"Pavan Nallamothu"},"programmingLanguage":"Rust","codeRepository":"https://github.com/pavanchow/ignition","license":"https://opensource.org/licenses/MIT"}
-</script>
-<script type="application/ld+json">
-{"@context":"https://schema.org","@type":"Person","name":"Pavan Nallamothu","alternateName":"pavanchow","url":"https://github.com/pavanchow","sameAs":["https://github.com/pavanchow","https://hackerone.com/pavanchow"]}
-</script>
+<title>Ignition: boot sequence simulator in Rust | Pavan Nallamothu</title>
+  <meta name="description" content="Ignition is a deterministic boot sequence simulator in pure, safe Rust with zero dependencies, with a real MBR parser and boot config. By Pavan Nallamothu.">
+  <meta name="keywords" content="boot sequence simulator, MBR parser Rust, boot process in Rust, bootloader simulator, deterministic boot, safe Rust zero dependencies, operating system boot, master boot record, boot config, systems programming Rust, ignition rust, Pavan Nallamothu, pavanchow">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+  <meta name="author" content="Pavan Nallamothu">
+  <link rel="author" href="https://github.com/pavanchow">
+  <link rel="canonical" href="https://pavanchow.github.io/ignition/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Pavan Nallamothu">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:title" content="Ignition: boot sequence simulator in Rust | Pavan Nallamothu">
+  <meta property="og:description" content="A deterministic boot sequence simulator in pure, safe Rust with zero dependencies. An MBR parser and boot config you can step through. By Pavan Nallamothu.">
+  <meta property="og:url" content="https://pavanchow.github.io/ignition/">
+  <meta property="og:image" content="https://pavanchow.github.io/ignition/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Ignition by Pavan Nallamothu">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Ignition: boot sequence simulator in Rust | Pavan Nallamothu">
+  <meta name="twitter:description" content="A deterministic boot sequence simulator in pure, safe Rust with zero dependencies. An MBR parser and boot config you can step through. By Pavan Nallamothu.">
+  <meta name="twitter:image" content="https://pavanchow.github.io/ignition/og-image.png">
+  <meta name="twitter:creator" content="@pavanchow">
+  <meta name="twitter:site" content="@pavanchow">
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@graph":[{"@type":"SoftwareApplication","@id":"https://pavanchow.github.io/ignition/#software","name":"Ignition","applicationCategory":"DeveloperApplication","operatingSystem":"Linux, macOS, Windows","description":"Ignition is a deterministic boot sequence simulator in pure, safe Rust with zero dependencies, with an MBR parser and boot config you can step through.","url":"https://pavanchow.github.io/ignition/","image":"https://pavanchow.github.io/ignition/og-image.png","softwareVersion":"0.1.0","programmingLanguage":"Rust","codeRepository":"https://github.com/pavanchow/ignition","license":"https://opensource.org/licenses/MIT","datePublished":"2026-08-21","author":{"@id":"https://github.com/pavanchow#person"},"publisher":{"@id":"https://github.com/pavanchow#person"},"keywords":"boot sequence simulator, MBR parser, bootloader, deterministic boot, safe Rust, systems programming","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["Deterministic boot sequence simulation","MBR parser","Boot config parsing","Pure, safe Rust with zero dependencies","Step through the boot process"]},{"@type":"Person","@id":"https://github.com/pavanchow#person","name":"Pavan Nallamothu","alternateName":"pavanchow","url":"https://github.com/pavanchow","jobTitle":"Software Engineer and Security Researcher","knowsAbout":["Rust","operating systems","boot process","MBR","systems programming","low-level programming"],"sameAs":["https://github.com/pavanchow","https://hackerone.com/pavanchow"]},{"@type":"WebSite","@id":"https://pavanchow.github.io/ignition/#website","name":"Ignition by Pavan Nallamothu","url":"https://pavanchow.github.io/ignition/","author":{"@id":"https://github.com/pavanchow#person"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Pavan Nallamothu","item":"https://github.com/pavanchow"},{"@type":"ListItem","position":2,"name":"Ignition","item":"https://pavanchow.github.io/ignition/"}]},{"@type":"WebPage","url":"https://pavanchow.github.io/ignition/","name":"Ignition: boot sequence simulator in Rust | Pavan Nallamothu","isPartOf":{"@id":"https://pavanchow.github.io/ignition/#website"},"about":{"@id":"https://pavanchow.github.io/ignition/#software"},"author":{"@id":"https://github.com/pavanchow#person"},"inLanguage":"en"}]}
+  </script>
 <style>
   :root {
     --accent:#0071e3;--accent2:#3a9bff;--accent-soft:#e8f1fe;
@@ -328,6 +334,18 @@ IGNITION_FUZZ_OPS=5000 cargo test</pre>
 <footer><div class="wrap">
   <p>Ignition is MIT licensed. Source, the real parsers, and the correctness gate are on <a href="https://github.com/pavanchow/ignition">GitHub</a>.</p>
   <p>By <span class="name">Pavan Nallamothu</span>.</p>
+  <div class="more" style="max-width:820px;margin:40px auto 0;text-align:left">
+    <p style="text-align:center;font-weight:600;color:var(--ink);margin-bottom:16px">More open-source tools by Pavan Nallamothu</p>
+    <p style="font-size:15px;line-height:1.9">
+      <a href="https://pavanchow.github.io/bedrock/">Bedrock, a virtual CPU, assembler, and OS kernel in Rust</a><br>
+      <a href="https://pavanchow.github.io/seedcore/">Seedcore, a microkernel simulator in pure Rust std</a><br>
+      <a href="https://pavanchow.github.io/aurora/">Aurora, a from-scratch aarch64 kernel in Rust that runs in RAM</a><br>
+      <a href="https://pavanchow.github.io/nesthost/">Nesthost, a type-1 hypervisor simulator in pure Rust</a><br>
+      <a href="https://pavanchow.github.io/emberchip/">Emberchip, a deterministic RTOS simulator on an emulated MCU in Rust</a><br>
+      <a href="https://pavanchow.github.io/chronos/">Chronos, a CPU scheduler in Rust with FIFO, SJF, and MLFQ</a><br>
+      <a href="https://github.com/pavanchow">All projects on github.com/pavanchow</a>
+    </p>
+  </div>
 </div></footer>
 
 <script>
