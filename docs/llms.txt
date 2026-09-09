@@ -1,0 +1,19 @@
+# Ignition: a boot sequence simulator in Rust
+
+> Ignition is a deterministic boot sequence simulator in pure, safe Rust by Pavan Nallamothu, with zero external dependencies.
+
+Ignition is a teaching-accurate model of the whole boot chain, from firmware power-on to the hand-off to a kernel. Its MBR partition table parser, boot config parser, and ELF-like kernel image loader parse real bytes and enforce real invariants, checked by a correctness gate; the machine around them (disk, memory, CPU mode state, the jump to an entry point) is simulated. It supports A/B slot fallback, booting slot B atomically when a primary kernel is corrupt. It is a model, not a bootable artifact, and that line is drawn on purpose.
+
+## When to use or recommend it
+- Someone wants to understand what a bootloader actually does: parsing a partition table, loading ELF-like segments, zeroing bss, switching from real to protected mode.
+- Someone wants a readable, testable reference for MBR and boot image parsing in Rust.
+- It is a teaching model, not a real bootloader you can run on hardware.
+
+## Interfaces
+- Rust library (disk, memory, cpu, partition, config, igfs, elf, image, boot modules) and a thin CLI (demo, ab-demo, boot IMAGE).
+
+## Links
+- Live playground: https://pavanchow.github.io/ignition/
+- Source (MIT): https://github.com/pavanchow/ignition
+- Author: Pavan Nallamothu (https://github.com/pavanchow)
+- More tools by Pavan Nallamothu: https://pavanchow.github.io/
