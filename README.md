@@ -6,6 +6,8 @@ Ignition is a deterministic boot sequence simulator written in pure, safe Rust w
 
 **[Live demo](https://pavanchow.github.io/ignition/)** · MIT licensed · pure, safe Rust, zero dependencies
 
+Built from scratch by [Pavan Nallamothu](https://pavanchow.github.io/) ([LinkedIn](https://www.linkedin.com/in/pavanchow/), [GitHub](https://github.com/pavanchow)).
+
 ## What it is, honestly
 
 A real bootloader runs on bare metal. It cannot be exercised with `cargo test` and it cannot run inside a web page. Pretending otherwise would teach the wrong thing.
